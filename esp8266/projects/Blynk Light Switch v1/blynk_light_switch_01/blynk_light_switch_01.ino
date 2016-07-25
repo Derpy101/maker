@@ -17,7 +17,6 @@ extern "C" {
 //  #define BLYNK_DEBUG             // Optional, this enables lots of prints
 #endif
 
-//s
 // Wifi Settings
 #define WIFI_TIMEOUT  180         // Three minutes
 
