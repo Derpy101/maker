@@ -1,4 +1,4 @@
-//#define DEBUG
+#define DEBUG
 #include <DebugUtils.h>
 
 extern "C" {
@@ -53,10 +53,18 @@ const char blnkParamID[] = "blnk_token";
 bool outputState = false;       // State of output
 
 void toggleOutput(){
-  DEBUG_PRINTLN("Toggling output");
   outputState = !outputState;
-  digitalWrite(OUTPUT_PIN, outputState);
+  
+  if( outputState )
+    analogWrite( OUTPUT_PIN, 1023 );
+  else
+    analogWrite( OUTPUT_PIN, 0 );
+  
+//  digitalWrite(OUTPUT_PIN, outputState);
+
   Blynk.virtualWrite(BLYK_MAIN_LED, outputState*255);
+  DEBUG_PRINT("Toggling output: ");
+  DEBUG_PRINTLN( outputState );
 }
 
 
@@ -177,6 +185,22 @@ BLYNK_WRITE(BLNK_HARDRESET)
 BLYNK_WRITE(BLNK_MAIN_BTN)
 {
   if( param.asInt() != 0 ) toggleOutput();
+}
+
+// Dimmer changed
+
+BLYNK_WRITE(3)
+{
+  float value = param.asFloat();
+
+// value = pow(1024, value/1023)-1;
+//  value = 1 / ( 1 + exp( ( (value/84) - 6 ) * -1 ) ) * 1024;
+  value = pow( value/1023, 1/0.5 ) * 1023;
+  
+  DEBUG_PRINTLN( (int)value );
+  analogWrite( OUTPUT_PIN, (int)value );
+
+  Blynk.virtualWrite(V4, (int)value);
 }
 
 
