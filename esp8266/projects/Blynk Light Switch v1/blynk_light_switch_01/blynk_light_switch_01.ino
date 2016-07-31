@@ -11,20 +11,21 @@ extern "C" {
 #include <Switch.h>
 #include <Ticker.h>
 #include <SimpleTimer.h>
+#include "PWM_LED_control.h"
 
 #ifdef DEBUG
-  #define BLYNK_PRINT Serial      // Comment this out to disable prints and save space
-//  #define BLYNK_DEBUG             // Optional, this enables lots of prints
+  #define BLYNK_PRINT Serial          // Comment this out to disable prints and save space
+//  #define BLYNK_DEBUG               // Optional, this enables lots of prints
 #endif
 
 // Wifi Settings
-#define WIFI_TIMEOUT  180         // Three minutes
+#define WIFI_TIMEOUT  180             // Three minutes
 
 // Set up EEPROM usage
 // Pairs of variable and address
-#define EEPROM_MAX  512           // Max spaced used in EEPROM
-char blynk_token[34];             // Blynk tokcen
-int add_blynk_token = 0;          // Address of token in EEPROM
+#define EEPROM_MAX  512               // Max spaced used in EEPROM
+char blynk_token[34];                 // Blynk tokcen
+int add_blynk_token = 0;              // Address of token in EEPROM
 
 // Define GPIO pins and UART
 #define INPUT_PIN     2               // GPIO 2 is the main input pin
@@ -37,6 +38,8 @@ int add_blynk_token = 0;          // Address of token in EEPROM
 #define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
 #define BLYK_CTRL_LED   0             // Virtual pin showing normal operation
 #define BLNK_MAIN_BTN   2             // Virtual pin to match main button
+#define BLNK_DIMMER     3             // Virtual pin for dimmer slider
+#define BLNK_GAUGE      4             // Virtual pin for return level
 #define BLNK_RESET      30            // Virtual pin to trigger a reset
 #define BLNK_HARDRESET  31            // Virtual pin to trigger a hard reset (clearing wifi settings)
 #define BLNK_FLASH_TIME 1500L         // Period of Blynk flash
@@ -48,24 +51,9 @@ const char blnkParamID[] = "blnk_token";
 // Main payload
 // ------------
 
-// Button press or Blynk button press toggles main output
+// Setup output LED
 
-bool outputState = false;       // State of output
-
-void toggleOutput(){
-  outputState = !outputState;
-  
-  if( outputState )
-    analogWrite( OUTPUT_PIN, 1023 );
-  else
-    analogWrite( OUTPUT_PIN, 0 );
-  
-//  digitalWrite(OUTPUT_PIN, outputState);
-
-  Blynk.virtualWrite(BLYK_MAIN_LED, outputState*255);
-  DEBUG_PRINT("Toggling output: ");
-  DEBUG_PRINTLN( outputState );
-}
+pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );
 
 
 // For LED status
@@ -184,23 +172,16 @@ BLYNK_WRITE(BLNK_HARDRESET)
 
 BLYNK_WRITE(BLNK_MAIN_BTN)
 {
-  if( param.asInt() != 0 ) toggleOutput();
+  if( param.asInt() != 0 ) mainOutputLED.toggleState();
 }
 
 // Dimmer changed
 
-BLYNK_WRITE(3)
+BLYNK_WRITE(BLNK_DIMMER)
 {
-  float value = param.asFloat();
+  // Set value to level
 
-// value = pow(1024, value/1023)-1;
-//  value = 1 / ( 1 + exp( ( (value/84) - 6 ) * -1 ) ) * 1024;
-  value = pow( value/1023, 1/0.5 ) * 1023;
-  
-  DEBUG_PRINTLN( (int)value );
-  analogWrite( OUTPUT_PIN, (int)value );
-
-  Blynk.virtualWrite(V4, (int)value);
+  mainOutputLED.setLevel( param.asInt() );         // Virtual pin set 0-100
 }
 
 
@@ -224,8 +205,7 @@ void setup()
   // Set up GPIO
   
   pinMode(INPUT_PIN, INPUT);
-  pinMode(OUTPUT_PIN, OUTPUT);
-
+  
   // Setup EEPROM
   EEPROM.begin(EEPROM_MAX);
 
@@ -351,8 +331,6 @@ void loop()
 
   // Main payload
   
-  if(actionBtn.pushed()) {
-    toggleOutput();
-  }
+  if(actionBtn.pushed()) mainOutputLED.toggleState();
 }
 
