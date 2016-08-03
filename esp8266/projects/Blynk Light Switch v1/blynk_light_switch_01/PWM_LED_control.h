@@ -33,6 +33,9 @@ public:
   // Set level
   void setLevel(int newLevel);
 
+  // Step to next auto dim level
+  void autoDim(int dimRate);
+
 private:
 
   // Constants
@@ -47,6 +50,10 @@ private:
 
   // The current dimmer level set for the output (0-LEVEL_IN_MAX)
   int _outputLevel = 0;
+
+  // The change in dim rate, and dim direction
+  int _dimRate = 1;
+  bool _dimUp = true;
 
   // Update the pin PWM
   void setPinPWM( int newLevel );

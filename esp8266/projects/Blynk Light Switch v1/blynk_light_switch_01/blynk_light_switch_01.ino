@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 #include <DebugUtils.h>
 
 extern "C" {
@@ -13,28 +13,44 @@ extern "C" {
 #include <SimpleTimer.h>
 #include "PWM_LED_control.h"
 
-#ifdef DEBUG
-  #define BLYNK_PRINT Serial          // Comment this out to disable prints and save space
-//  #define BLYNK_DEBUG               // Optional, this enables lots of prints
-#endif
 
 // Wifi Settings
+// -------------
+
 #define WIFI_TIMEOUT  180             // Three minutes
 
 // Set up EEPROM usage
 // Pairs of variable and address
+
 #define EEPROM_MAX  512               // Max spaced used in EEPROM
 char blynk_token[34];                 // Blynk tokcen
 int add_blynk_token = 0;              // Address of token in EEPROM
 
 // Define GPIO pins and UART
-#define INPUT_PIN     2               // GPIO 2 is the main input pin
-#define CTRL_BTN      3               // GPIO 3 is the control button
-#define CTRL_LED      1               // GPIO 1 is the control LED
+// -------------------------
+
 #define OUTPUT_PIN    0               // GPIO 0 is the output pin
+#define INPUT_PIN     2               // GPIO 2 is the main input pin
+
+// If DEBUG, serial is running, so control LED goes to unconnceted GPIO pin
+
+#ifdef DEBUG
+  #define CTRL_LED      5               
+#else
+  #define CTRL_LED      1               
+#endif
+
 #define SERIAL_SPEED  115200          // Serial port speed
 
 // Define Blynk environment
+// ------------------------
+
+#ifdef DEBUG
+  #define BLYNK_PRINT Serial          // Comment this out to disable prints and save space
+//  #define BLYNK_DEBUG               // Optional, this enables lots of prints
+#endif
+
+// Virtual pin assignments
 #define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
 #define BLYK_CTRL_LED   0             // Virtual pin showing normal operation
 #define BLNK_MAIN_BTN   2             // Virtual pin to match main button
@@ -42,66 +58,62 @@ int add_blynk_token = 0;              // Address of token in EEPROM
 #define BLNK_GAUGE      4             // Virtual pin for return level
 #define BLNK_RESET      30            // Virtual pin to trigger a reset
 #define BLNK_HARDRESET  31            // Virtual pin to trigger a hard reset (clearing wifi settings)
-#define BLNK_FLASH_TIME 1500L         // Period of Blynk flash
 
-const char blnkParamPrompt[] = "Enter Blynk token";
-const char blnkParamID[] = "blnk_token";
-
-
-// Main payload
-// ------------
-
-// Setup output LED
-
-pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );
+const static int BLNK_FLASH_TIME = 15000;                       // Period of Blynk flash
+const static char blnkParamPrompt[] = "Enter Blynk token";
+const static char blnkParamID[] = "blnk_token";
 
 
-// For LED status
-// --------------
+// Setup Outputs
+// -------------
 
-#define FLASHCONFIG     0.15          // Flash LED very fast
-#define FLASHNORMAL     2.0           // Flash LED slow
-#define FLASHSTARTING   0.5           // Flash LED fast
+// Setup output LEDs
 
-Ticker flashLED;
+#define FLASHCONFIG     1500          // Flash LED very fast
+#define FLASHNORMAL     2000          // Flash LED slow
+#define FLASHSTARTING   500           // Flash LED fast
 
-bool nowrunning = false;
-void flashLEDtick()
-{
-  // Toggle state of LED
-  
-  int state = digitalRead(CTRL_LED);  // get the current state of pin
-  digitalWrite(CTRL_LED, !state);     // set pin to the opposite state
+pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );             // Main output LED
+pwmLED ctrlLED( BLYK_CTRL_LED, false, 100 );         // Control LED
+
+// For control LED
+
+Ticker updateCtrlLED;
+
+void ctrlLEDtick()
+{  
+  ctrlLED.toggleState();                // Toggle state of control LED
+
+  DEBUG_PRINTLN("-");
 }
 
 // WiFiManager Callback Functions
 // ------------------------------
 
 // Setup WifiManager
+
 WiFiManager wifiManager;  
 
 bool shouldSaveConfig;                // has the config changed after running the captive portal
 
-// Called when the configu gets updated from the portal
+// Called when the config gets updated from the portal
 
-void saveConfigCallback () {
-
+void saveConfigCallback ()
+{
   DEBUG_PRINTLN("Should save config");
   shouldSaveConfig = true;                // Need to save the new config to EEPROM
 }
 
 // Gets called when WiFiManager enters configuration mode
 
-void configModeCallback (WiFiManager *myWiFiManager) {
-
-  // Debug it
+void configModeCallback (WiFiManager *myWiFiManager)
+{
   DEBUG_PRINTLN("Entered config mode");
   DEBUG_PRINTLN(WiFi.softAPIP());
-  //if you used auto generated SSID, print it
-  DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());
+  DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());      //if you used auto generated SSID, print it
   
   // Entered config mode, make led toggle faster
-  flashLED.attach(FLASHCONFIG, flashLEDtick);
+  updateCtrlLED.attach_ms(FLASHCONFIG, ctrlLEDtick);
 }
 
 // Switch functions
@@ -117,20 +129,20 @@ Switch actionBtn(INPUT_PIN, INPUT, LOW, DEBOUNCE, LONG_PRESS );
 // Reset function
 // --------------
 
-void doReset( bool hard = false ) {
-  // Turn on serial
-  
+void doReset( bool hard = false )
+{
   #ifdef DEBUG
-    Serial.begin(SERIAL_SPEED);
-  #else
-    flashLED.attach(FLASHCONFIG, flashLEDtick);
+    Serial.begin(SERIAL_SPEED);       // Turn on serial
   #endif
-
+  
+  updateCtrlLED.attach_ms(FLASHCONFIG, ctrlLEDtick);     // Make led toggle faster 
+  
   DEBUG_PRINTLN( "Starting reset" );
   
   delay(1000);
 
-  if( hard ) {
+  if( hard )
+  {
    
     // Reset the Wifi settings
 
@@ -145,7 +157,9 @@ void doReset( bool hard = false ) {
   
   delay(5000);
 
-  ESP.reset();      // This only works correctly if there has been a normal restart after a flash.   
+  ESP.restart();      // This only works correctly if there has been a normal restart after a flash.  
+  
+  delay(1000); 
 }
 
 
@@ -159,14 +173,12 @@ BLYNK_WRITE(BLNK_RESET)
   doReset();
 }
 
-
 // Initiate Hard Reset 
 
 BLYNK_WRITE(BLNK_HARDRESET)
 {
   doReset(true);
 }
-
 
 // Blynk button pressed
 
@@ -179,55 +191,51 @@ BLYNK_WRITE(BLNK_MAIN_BTN)
 
 BLYNK_WRITE(BLNK_DIMMER)
 {
-  // Set value to level
-
   mainOutputLED.setLevel( param.asInt() );         // Virtual pin set 0-100
 }
 
-
 // Flash Blynk control LED
 
-SimpleTimer blnkFlashTimer;
+Ticker updateBlnkLED;
 bool blnkFlash = false;
 
-void flashBlnkLED()
-{
-  Blynk.virtualWrite(BLYK_CTRL_LED, blnkFlash*255);
-  blnkFlash = !blnkFlash;
+void blnkLEDtick()
+{  
+  Blynk.virtualWrite(BLYK_CTRL_LED, blnkFlash*255);       // Toggle state of control LED
+  blnkFlash = !blnkFlash; 
 }
+
+
 
 // Main Setup
 // ----------
 
 
 void setup()
-{
-  // Set up GPIO
-  
-  pinMode(INPUT_PIN, INPUT);
-  
+{  
   // Setup EEPROM
   EEPROM.begin(EEPROM_MAX);
 
   // start flashing as we start in AP mode and try to connect
-  flashLED.attach(FLASHSTARTING, flashLEDtick);
+  updateCtrlLED.attach_ms(FLASHSTARTING, ctrlLEDtick);
 
   // Turn on serial
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);
-    DEBUG_PRINTLN( "" );
+    DEBUG_PRINTLN( "\n\n" );
     DEBUG_PRINTVB("Debug ON");
   #else
     wifiManager.setDebugOutput(false);
-    pinMode(CTRL_BTN, INPUT);
-    pinMode(CTRL_LED, OUTPUT);
   #endif
 
   DEBUG_PRINTLN("Waiting for config mode request");
+  delay(1000);
 
   unsigned const long interval = START_TIME; // the time we need to wait
   unsigned long startMillis = millis();  
-  while ((unsigned long)(millis() - startMillis) <= interval) {
+  
+  while ((unsigned long)(millis() - startMillis) <= interval)
+  {
     yield();
     actionBtn.poll();  
 
@@ -264,15 +272,16 @@ void setup()
   
   shouldSaveConfig = false;
 
-  if(!wifiManager.autoConnect("BlynkIFTTT")) {
+  if(!wifiManager.autoConnect("BlynkIFTTT"))
+  {
     DEBUG_PRINTLN("Failed to connect and hit timeout");
     
     doReset();
   } 
   
   // If new config loaded, then save to EEPROM
-  if( shouldSaveConfig ) {
-
+  if( shouldSaveConfig )
+  {
     // Copy values from parameters
     strcpy(blynk_token, custom_blynk_token.getValue());  
 
@@ -284,7 +293,8 @@ void setup()
     EepromUtil::eeprom_write_string(0, blynk_token);
     EEPROM.commit();
   }
-  else {
+  else
+  {
     DEBUG_PRINTLN( "Using saved token" );
   }
 
@@ -299,38 +309,31 @@ void setup()
   Blynk.config(blynk_token);
 
   // Flash LED for normal operation
-  flashLED.attach(FLASHNORMAL, flashLEDtick);
+  updateCtrlLED.attach_ms(FLASHNORMAL, ctrlLEDtick);
 
   // Start Blynk LED flashing
-  blnkFlashTimer.setInterval(BLNK_FLASH_TIME, flashBlnkLED);
+  updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);
   
   DEBUG_PRINTLN( "Up and running ..." );
 
   delay(1000);
-
-  // Turn off serial
-  #ifdef DEBUG
-//    Serial.end();
-//    pinMode(CTRL_BTN, INPUT);
-//    pinMode(CTRL_LED, OUTPUT);
-  #endif
 }
 
 
 // Main run loop
 // -------------
 
+
 void loop()
 {
-  Blynk.run();                       // Let Blynk do its stuff
-  blnkFlashTimer.run();              // Initiates SimpleTimer
+  if (WiFi.status() == WL_CONNECTED) Blynk.run();   // Let Blynk do its stuff
 
   // Poll input switches
-  actionBtn.poll();                           // Poll main button
-  if(actionBtn.longPress()) doReset(true);    // If long press then reset settings
+  actionBtn.poll();                                 // Poll main button
+  if(actionBtn.longPress()) doReset(true);          // If long press then reset settings
 
   // Main payload
   
-  if(actionBtn.pushed()) mainOutputLED.toggleState();
+  if(actionBtn.pushed()) mainOutputLED.toggleState();  
 }
 

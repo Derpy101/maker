@@ -1,4 +1,3 @@
-
 #define DEBUG
 #include "PWM_LED_control.h"
 
@@ -6,9 +5,9 @@
 // Constructor
 pwmLED::pwmLED( int outputPin, bool startState, int startLevel )
 {
-  _outputPin = outputPin;     // Set output pin for this instance
-  _outputLevel = startLevel;     // Set starting dim level
-  _outputState = startState;  // Set starting state
+  _outputPin = outputPin;         // Set output pin for this instance
+  _outputLevel = startLevel;      // Set starting dim level
+  _outputState = startState;      // Set starting state
 
   pinMode(_outputPin, OUTPUT);
 }
@@ -72,5 +71,30 @@ void pwmLED::setPinPWM( int newLevel )
   DEBUG_PRINT( newLevel );
   DEBUG_PRINT(", PWM set to ");
   DEBUG_PRINTLN( newOutputPWM );
+}
+
+
+// Step to next auto dim level
+void pwmLED::autoDim(int dimRate)
+{
+  // Go up or down
+  
+  if( _dimUp ) _outputLevel += dimRate;
+  else _outputLevel -= dimRate;
+
+  // Change direction
+  
+  if( _dimUp && _outputLevel >= LEVEL_IN_MAX )
+  {
+    _outputLevel = LEVEL_IN_MAX;
+    _dimUp = false;
+  }
+  if( !_dimUp && _outputLevel <= 0 )
+  {
+    _outputLevel = 0;
+    _dimUp = true;
+  }
+
+  if( _outputState ) this->setPinPWM( _outputLevel );   // If on, then set it.
 }
 
