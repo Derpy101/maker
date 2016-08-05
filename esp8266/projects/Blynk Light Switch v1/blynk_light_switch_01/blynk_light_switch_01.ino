@@ -1,4 +1,4 @@
-//#define DEBUG
+#define DEBUG
 #include <DebugUtils.h>
 
 extern "C" {
@@ -10,7 +10,6 @@ extern "C" {
 #include <EepromUtil.h>
 #include <Switch.h>
 #include <Ticker.h>
-#include <SimpleTimer.h>
 #include "PWM_LED_control.h"
 
 
@@ -69,9 +68,10 @@ const static char blnkParamID[] = "blnk_token";
 
 // Setup output LEDs
 
-#define FLASHCONFIG     1500          // Flash LED very fast
-#define FLASHNORMAL     2000          // Flash LED slow
-#define FLASHSTARTING   500           // Flash LED fast
+const static int FLASHCONFIG = 1500;            // Flash LED very fast
+const static int FLASHNORMAL =2000;             // Flash LED slow
+const static int FLASHSTARTING = 500;           // Flash LED fast
+const static int DIMRATE = 10;
 
 pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );             // Main output LED
 pwmLED ctrlLED( BLYK_CTRL_LED, false, 100 );         // Control LED
@@ -245,8 +245,8 @@ void setup()
 
     // If long press then reset setttings
 
-    if(actionBtn.longPress()) {
-   
+    if(actionBtn.longPress())
+    {
       // Reset the Wifi settings
       DEBUG_PRINTLN( "Clearing settings" );
       wifiManager.resetSettings();
@@ -265,7 +265,7 @@ void setup()
   wifiManager.setAPCallback(configModeCallback);
 
   // Set Wifi autoconnect timeout
-  wifiManager.setTimeout(WIFI_TIMEOUT);   
+  wifiManager.setConfigPortalTimeout(WIFI_TIMEOUT);   
 
   // Try to connect to Wifi - if not, the run captive portal
   // If still no connect, then restart and try again
@@ -326,7 +326,7 @@ void setup()
 
 void loop()
 {
-  if (WiFi.status() == WL_CONNECTED) Blynk.run();   // Let Blynk do its stuff
+  Blynk.run();                                      // Let Blynk do its stuff - it will also try to reconnect wifi if disconnected
 
   // Poll input switches
   actionBtn.poll();                                 // Poll main button
