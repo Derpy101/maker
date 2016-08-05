@@ -30,15 +30,15 @@ extern "C" {
 const static int SERIAL_SPEED = 115200;          // Serial port speed
 
 
-// Setup Output LED
-// ----------------
+// Setup Output LEDs
+// -----------------
 
-const static int FLASHCONFIG = 75;            // Flash LED very fast
-const static int FLASHNORMAL = 100;            // Flash LED slow
-const static int FLASHSTARTING = 25;           // Flash LED fast
-const static int DIMRATE = 5;
+const static int FLASH_CONFIG = 75;            // Flash LED very fast
+const static int FLASH_NORMAL = 100;            // Flash LED slow
+const static int FLASH_STARTING = 25;           // Flash LED fast
+const static int LED_DIMRATE = 5;
 
-pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );       // Main output LED
+pwmLED outputLED( OUTPUT_PIN, false, 100 );           // Main output LED
 pwmLED ctrlLED( CTRL_LED, false, 100 );               // Control LED
 
 // For control LED
@@ -47,9 +47,20 @@ Ticker updateCtrlLED;
 
 void ctrlLEDtick()
 {  
-  ctrlLED.autoDim(DIMRATE);             // Move LED to next dim level
+  ctrlLED.autoDim(LED_DIMRATE);             // Move LED to next dim level
 
-  DEBUG_PRINTLN("-");
+  DEBUG_PRINT("~");
+}
+
+// For output LED
+
+Ticker updateOuputLED;
+
+void outputLEDtick()
+{  
+  outputLED.autoDim(LED_DIMRATE);             // Move LED to next dim level
+
+  DEBUG_PRINT("^");
 }
 
 
@@ -58,7 +69,7 @@ void ctrlLEDtick()
 
 const static int WIFI_TIMEOUT = 180;              // Three minutes
 const static int EEPROM_MAX = 512;                // Max spaced used in EEPROM
-const static char SSID_NAME[] = "Blynk Switch";
+const static char SSID_NAME[] = "BlynkSwitch";
 
 // Set up EEPROM usage
 // Pairs of variable and address
@@ -91,7 +102,7 @@ void configModeCallback (WiFiManager *myWiFiManager)
   DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());      //if you used auto generated SSID, print it
   
   // Entered config mode, make led toggle faster
-  updateCtrlLED.attach_ms(FLASHCONFIG, ctrlLEDtick);
+  updateCtrlLED.attach_ms(FLASH_CONFIG, ctrlLEDtick);
 }
 
 
@@ -104,7 +115,7 @@ void doReset( bool hard = false )
     Serial.begin(SERIAL_SPEED);       // Turn on serial
   #endif
   
-  updateCtrlLED.attach_ms(FLASHCONFIG, ctrlLEDtick);     // Make led toggle faster 
+  updateCtrlLED.attach_ms(FLASH_CONFIG, ctrlLEDtick);     // Make led toggle faster 
   
   DEBUG_PRINTLN( "Starting reset" );
   
@@ -173,14 +184,14 @@ BLYNK_WRITE(BLNK_HARDRESET)
 
 BLYNK_WRITE(BLNK_MAIN_BTN)
 {
-  if( param.asInt() != 0 ) mainOutputLED.toggleState();       // Toggle LED state
+  if( param.asInt() != 0 ) outputLED.toggleState();       // Toggle LED state
 }
 
 // Dimmer changed
 
 BLYNK_WRITE(BLNK_DIMMER)
 {
-  mainOutputLED.setLevel( param.asInt() );         // Virtual pin set 0-100
+  outputLED.setLevel( param.asInt() );         // Virtual pin set 0-100
 }
 
 // Flash Blynk control LED
@@ -216,7 +227,7 @@ void setup()
   EEPROM.begin(EEPROM_MAX);
 
   // start flashing as we start in AP mode and try to connect
-  updateCtrlLED.attach_ms(FLASHSTARTING, ctrlLEDtick);
+  updateCtrlLED.attach_ms(FLASH_STARTING, ctrlLEDtick);
 
   // Turn on serial
   #ifdef DEBUG
@@ -305,7 +316,7 @@ void setup()
 
   // Flash LED for normal operation
   
-  updateCtrlLED.attach_ms(FLASHNORMAL, ctrlLEDtick);
+  updateCtrlLED.attach_ms(FLASH_NORMAL, ctrlLEDtick);
 
   if( isOnline ) updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);    // Start Blynk LED flashing
   
@@ -327,7 +338,7 @@ void loop()
   
   // Payloads
 
-  if(actionBtn.longPress()) doReset();                    // If long press then restart
-  if(actionBtn.pushed()) mainOutputLED.toggleState();     // LED on or off
+  if(actionBtn.longPress()) doReset();                // If long press then restart
+  if(actionBtn.pushed()) outputLED.toggleState();     // LED on or off
 }
 

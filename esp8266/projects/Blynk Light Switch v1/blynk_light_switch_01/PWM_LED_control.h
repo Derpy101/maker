@@ -36,6 +36,9 @@ public:
   // Step to next auto dim level
   void autoDim(int dimRate);
 
+  // Set dim direction
+  void setDimDirection(int dimUp);
+
 private:
 
   // Constants

@@ -98,3 +98,10 @@ void pwmLED::autoDim(int dimRate)
   if( _outputState ) this->setPinPWM( _outputLevel );   // If on, then set it.
 }
 
+
+// Set dim direction
+void pwmLED::setDimDirection(int dimUp)
+{
+  _dimUp = dimUp;       // Set direction
+}
+
