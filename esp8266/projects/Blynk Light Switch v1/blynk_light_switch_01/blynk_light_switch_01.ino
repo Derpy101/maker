@@ -13,18 +13,6 @@ extern "C" {
 #include "PWM_LED_control.h"
 
 
-// Wifi Settings
-// -------------
-
-#define WIFI_TIMEOUT  180             // Three minutes
-
-// Set up EEPROM usage
-// Pairs of variable and address
-
-#define EEPROM_MAX  512               // Max spaced used in EEPROM
-char blynk_token[34];                 // Blynk tokcen
-int add_blynk_token = 0;              // Address of token in EEPROM
-
 // Define GPIO pins and UART
 // -------------------------
 
@@ -34,47 +22,24 @@ int add_blynk_token = 0;              // Address of token in EEPROM
 // If DEBUG, serial is running, so control LED goes to unconnceted GPIO pin
 
 #ifdef DEBUG
-  #define CTRL_LED      5               
+  #define CTRL_LED    5               
 #else
-  #define CTRL_LED      1               
+  #define CTRL_LED    1               // Using TX port on ESP-01
 #endif
 
-#define SERIAL_SPEED  115200          // Serial port speed
-
-// Define Blynk environment
-// ------------------------
-
-#ifdef DEBUG
-  #define BLYNK_PRINT Serial          // Comment this out to disable prints and save space
-//  #define BLYNK_DEBUG               // Optional, this enables lots of prints
-#endif
-
-// Virtual pin assignments
-#define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
-#define BLYK_CTRL_LED   0             // Virtual pin showing normal operation
-#define BLNK_MAIN_BTN   2             // Virtual pin to match main button
-#define BLNK_DIMMER     3             // Virtual pin for dimmer slider
-#define BLNK_GAUGE      4             // Virtual pin for return level
-#define BLNK_RESET      30            // Virtual pin to trigger a reset
-#define BLNK_HARDRESET  31            // Virtual pin to trigger a hard reset (clearing wifi settings)
-
-const static int BLNK_FLASH_TIME = 15000;                       // Period of Blynk flash
-const static char blnkParamPrompt[] = "Enter Blynk token";
-const static char blnkParamID[] = "blnk_token";
+const static int SERIAL_SPEED = 115200;          // Serial port speed
 
 
-// Setup Outputs
-// -------------
+// Setup Output LED
+// ----------------
 
-// Setup output LEDs
+const static int FLASHCONFIG = 75;            // Flash LED very fast
+const static int FLASHNORMAL = 100;            // Flash LED slow
+const static int FLASHSTARTING = 25;           // Flash LED fast
+const static int DIMRATE = 5;
 
-const static int FLASHCONFIG = 1500;            // Flash LED very fast
-const static int FLASHNORMAL =2000;             // Flash LED slow
-const static int FLASHSTARTING = 500;           // Flash LED fast
-const static int DIMRATE = 10;
-
-pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );             // Main output LED
-pwmLED ctrlLED( BLYK_CTRL_LED, false, 100 );         // Control LED
+pwmLED mainOutputLED( OUTPUT_PIN, false, 100 );       // Main output LED
+pwmLED ctrlLED( CTRL_LED, false, 100 );               // Control LED
 
 // For control LED
 
@@ -82,17 +47,30 @@ Ticker updateCtrlLED;
 
 void ctrlLEDtick()
 {  
-  ctrlLED.toggleState();                // Toggle state of control LED
+  ctrlLED.autoDim(DIMRATE);             // Move LED to next dim level
 
   DEBUG_PRINTLN("-");
 }
 
-// WiFiManager Callback Functions
-// ------------------------------
+
+// Wifi Settings
+// -------------
+
+const static int WIFI_TIMEOUT = 180;              // Three minutes
+const static int EEPROM_MAX = 512;                // Max spaced used in EEPROM
+const static char SSID_NAME[] = "Blynk Switch";
+
+// Set up EEPROM usage
+// Pairs of variable and address
+
+char blynk_token[34];                 // Blynk tokcen
+int add_blynk_token = 0;              // Address of token in EEPROM
 
 // Setup WifiManager
 
 WiFiManager wifiManager;  
+
+// WiFiManager Callback Functions
 
 bool shouldSaveConfig;                // has the config changed after running the captive portal
 
@@ -115,15 +93,6 @@ void configModeCallback (WiFiManager *myWiFiManager)
   // Entered config mode, make led toggle faster
   updateCtrlLED.attach_ms(FLASHCONFIG, ctrlLEDtick);
 }
-
-// Switch functions
-// ----------------
-
-#define LONG_PRESS  20000     // Need to press for 20s to initiate long press
-#define DEBOUNCE    50        // 50ms for switch debounce
-#define START_TIME  10000     // 10 secs at start up to go into config mode
-
-Switch actionBtn(INPUT_PIN, INPUT, LOW, DEBOUNCE, LONG_PRESS );
 
 
 // Reset function
@@ -163,28 +132,48 @@ void doReset( bool hard = false )
 }
 
 
+// Define Blynk environment
+// ------------------------
+
+#ifdef DEBUG
+  #define BLYNK_PRINT Serial          // Comment this out to disable prints and save space
+//  #define BLYNK_DEBUG               // Optional, this enables lots of prints
+#endif
+
+// Virtual pin assignments
+#define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
+#define BLYK_CTRL_LED   0             // Virtual pin showing normal operation
+#define BLNK_MAIN_BTN   2             // Virtual pin to match main button
+#define BLNK_DIMMER     3             // Virtual pin for dimmer slider
+#define BLNK_GAUGE      4             // Virtual pin for return level
+#define BLNK_RESET      30            // Virtual pin to trigger a reset
+#define BLNK_HARDRESET  31            // Virtual pin to trigger a hard reset (clearing wifi settings)
+
+const static int BLNK_FLASH_TIME = 15000;                       // Period of Blynk flash
+const static char BLNK_PARAM_PROMPT[] = "Enter Blynk token";
+const static char BLNK_PARAM_ID[] = "blnk_token";
+
 // Functions called on Blynk actions
-// ----------------------------------
 
 // Initiate reset
 
 BLYNK_WRITE(BLNK_RESET)
 {
-  doReset();
+  doReset();                    // Soft reset
 }
 
 // Initiate Hard Reset 
 
 BLYNK_WRITE(BLNK_HARDRESET)
 {
-  doReset(true);
+  doReset(true);                // Hard reset (clear settings)
 }
 
 // Blynk button pressed
 
 BLYNK_WRITE(BLNK_MAIN_BTN)
 {
-  if( param.asInt() != 0 ) mainOutputLED.toggleState();
+  if( param.asInt() != 0 ) mainOutputLED.toggleState();       // Toggle LED state
 }
 
 // Dimmer changed
@@ -206,10 +195,20 @@ void blnkLEDtick()
 }
 
 
+// Switch functions
+// ----------------
+
+const static int LONG_PRESS = 20000;       // Need to press for 20s to initiate long press
+const static int DEBOUNCE = 50;            // 50ms for switch debounce
+const static int START_TIME = 10000;       // 10 secs at start up to go into config mode
+
+Switch actionBtn(INPUT_PIN, INPUT, LOW, DEBOUNCE, LONG_PRESS );
+
 
 // Main Setup
 // ----------
 
+bool isOnline = false;          // Did we initially get connecteed
 
 void setup()
 {  
@@ -257,7 +256,7 @@ void setup()
   DEBUG_PRINTLN("Continue");
   
   // Add Captive Portal parameter for Blynk token
-  WiFiManagerParameter custom_blynk_token(blnkParamID, blnkParamPrompt, blynk_token, 34);
+  WiFiManagerParameter custom_blynk_token(BLNK_PARAM_ID, BLNK_PARAM_PROMPT, blynk_token, 34);
   wifiManager.addParameter(&custom_blynk_token);
 
   // Setup WiFi Manager call backs
@@ -272,12 +271,9 @@ void setup()
   
   shouldSaveConfig = false;
 
-  if(!wifiManager.autoConnect("BlynkIFTTT"))
-  {
-    DEBUG_PRINTLN("Failed to connect and hit timeout");
-    
-    doReset();
-  } 
+  isOnline = wifiManager.autoConnect( SSID_NAME );          // Try to connect
+  
+  if( !isOnline ) DEBUG_PRINTLN("Failed to connect and hit timeout");
   
   // If new config loaded, then save to EEPROM
   if( shouldSaveConfig )
@@ -298,21 +294,20 @@ void setup()
     DEBUG_PRINTLN( "Using saved token" );
   }
 
-  // Read Blynk tocken from EEPROM
+  // Read Blynk token from EEPROM
   EepromUtil::eeprom_read_string(0, blynk_token, 34 );
 
   DEBUG_PRINT( "Read token: -" );
   DEBUG_PRINT( blynk_token ); 
   DEBUG_PRINTLN( "-" );
 
-  // Configure Blynk session
-  Blynk.config(blynk_token);
+  if( isOnline ) Blynk.config(blynk_token);          // Configure Blynk session
 
   // Flash LED for normal operation
+  
   updateCtrlLED.attach_ms(FLASHNORMAL, ctrlLEDtick);
 
-  // Start Blynk LED flashing
-  updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);
+  if( isOnline ) updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);    // Start Blynk LED flashing
   
   DEBUG_PRINTLN( "Up and running ..." );
 
@@ -326,14 +321,13 @@ void setup()
 
 void loop()
 {
-  Blynk.run();                                      // Let Blynk do its stuff - it will also try to reconnect wifi if disconnected
+  if( isOnline ) Blynk.run();                       // Let Blynk do its stuff - it will also try to reconnect wifi if disconnected
 
-  // Poll input switches
   actionBtn.poll();                                 // Poll main button
-  if(actionBtn.longPress()) doReset(true);          // If long press then reset settings
-
-  // Main payload
   
-  if(actionBtn.pushed()) mainOutputLED.toggleState();  
+  // Payloads
+
+  if(actionBtn.longPress()) doReset();                    // If long press then restart
+  if(actionBtn.pushed()) mainOutputLED.toggleState();     // LED on or off
 }
 
