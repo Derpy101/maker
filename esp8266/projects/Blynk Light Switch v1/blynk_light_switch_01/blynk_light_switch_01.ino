@@ -33,34 +33,25 @@ const static int SERIAL_SPEED = 115200;          // Serial port speed
 // Setup Output LEDs
 // -----------------
 
-const static int FLASH_CONFIG = 75;            // Flash LED very fast
-const static int FLASH_NORMAL = 100;            // Flash LED slow
-const static int FLASH_STARTING = 25;           // Flash LED fast
-const static int LED_DIMRATE = 5;
+const static int LED_UPRATE_RATE = 50;
 
-pwmLED outputLED( OUTPUT_PIN, false, 100 );           // Main output LED
-pwmLED ctrlLED( CTRL_LED, false, 100 );               // Control LED
+const static int LED_DIM_NORMAL = 5;
+const static int LED_DIM_FAST = 10;
+const static int LED_DIM_VERYFAST = 20;
 
-// For control LED
+pwmLED outputLED( OUTPUT_PIN, false, PWM_LED_LEVEL_IN_MAX, LED_DIM_NORMAL, PWM_LED_MODE_BINARY );            // Main output LED
+pwmLED ctrlLED( CTRL_LED, true, 0, LED_DIM_FAST, PWM_LED_MODE_CYCLICK );                 // Control LED
 
-Ticker updateCtrlLED;
+// For LEDs
 
-void ctrlLEDtick()
+Ticker updateLEDs;
+
+void updateLEDtick()
 {  
-  ctrlLED.autoDim(LED_DIMRATE);             // Move LED to next dim level
+  ctrlLED.autoDim();               // Move control LED to next dim level
+  outputLED.autoDim();             // Move output LED to next dim level
 
   DEBUG_PRINT("~");
-}
-
-// For output LED
-
-Ticker updateOuputLED;
-
-void outputLEDtick()
-{  
-  outputLED.autoDim(LED_DIMRATE);             // Move LED to next dim level
-
-  DEBUG_PRINT("^");
 }
 
 
@@ -101,8 +92,7 @@ void configModeCallback (WiFiManager *myWiFiManager)
   DEBUG_PRINTLN(WiFi.softAPIP());
   DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());      //if you used auto generated SSID, print it
   
-  // Entered config mode, make led toggle faster
-  updateCtrlLED.attach_ms(FLASH_CONFIG, ctrlLEDtick);
+  ctrlLED.setDimRate( LED_DIM_VERYFAST );         // Entered config mode, make led toggle faster
 }
 
 
@@ -115,7 +105,7 @@ void doReset( bool hard = false )
     Serial.begin(SERIAL_SPEED);       // Turn on serial
   #endif
   
-  updateCtrlLED.attach_ms(FLASH_CONFIG, ctrlLEDtick);     // Make led toggle faster 
+  ctrlLED.setDimRate( LED_DIM_VERYFAST );     // Make led toggle faster 
   
   DEBUG_PRINTLN( "Starting reset" );
   
@@ -227,7 +217,7 @@ void setup()
   EEPROM.begin(EEPROM_MAX);
 
   // start flashing as we start in AP mode and try to connect
-  updateCtrlLED.attach_ms(FLASH_STARTING, ctrlLEDtick);
+  updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);
 
   // Turn on serial
   #ifdef DEBUG
@@ -312,11 +302,9 @@ void setup()
   DEBUG_PRINT( blynk_token ); 
   DEBUG_PRINTLN( "-" );
 
-  if( isOnline ) Blynk.config(blynk_token);          // Configure Blynk session
+  if( isOnline ) Blynk.config(blynk_token);         // Configure Blynk session
 
-  // Flash LED for normal operation
-  
-  updateCtrlLED.attach_ms(FLASH_NORMAL, ctrlLEDtick);
+  ctrlLED.setDimRate( LED_DIM_NORMAL );           // Flash LED for normal operation
 
   if( isOnline ) updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);    // Start Blynk LED flashing
   
