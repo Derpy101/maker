@@ -11,19 +11,13 @@
 
 #include <math.h>
 
-// Constants
-#define PWM_LED_MODE_BINARY     0
-#define PWM_LED_MODE_CYCLICK    1
-#define PWM_LED_MODE_FADE       2
-
-const static int PWM_LED_LEVEL_IN_MAX = 100;          // Input range is 0 to LEVEL_IN_MAX
 
 class pwmLED {
 
 public:
 
   // Constructor
-  pwmLED( int outputPin, bool startState, int startLevel, int dimRate, int dimMode );
+  pwmLED( int outputPin, bool startState, int startLevel, int dimRate );
 
   // Get the current state
   bool getState();
@@ -43,13 +37,20 @@ public:
   // Step to next auto dim level
   void autoDim();
 
-  // Set dim mode
+  // Set dim rate
   void setDimRate(int dimRate);
 
+  // Set dim direction
+  void setDimDirection(int dimUp);
+  
+  // Set dim mode
+  void dimLED(bool startDimming, bool isCyclick);
+  
 private:
 
   // Constants
-  const static int PWM_MAX = 1023;              // PWM out range is 0 to PWM_MAX
+  constexpr const static int _PWM_MAX = 1023;                       // PWM out range is 0 to _PWM_MAX
+  constexpr const static int _PWM_LED_LEVEL_IN_MAX = 100;           // Input range is 0 to LEVEL_IN_MAX
 
   // The output pin to control
   int _outputPin;
@@ -63,7 +64,8 @@ private:
   // The change in dim rate, mode and dim direction
   int _dimRate = 1;
   bool _dimUp = true;
-  bool _dimMode = true;
+  bool _dimLED = false;
+  bool _isCyclick = false;
 
   // Update the pin PWM
   void setPinPWM( int newLevel );

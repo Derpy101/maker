@@ -1,3 +1,45 @@
+/*
+The MIT License (MIT)
+Copyright (c) 2016 Chris Gregg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+/*
+
+On start up:
+  1. Tries to connect to saved wifi settings if they exist - Control LED fast flashes
+  2. If button pressed for a more than 30sec, then reset wifi settings
+  3. If no wifi or reset wifi settings go into configuration mode - Control LED very fast flashes
+  4. Config mode - creates AP with SSID "BlynkSwitch", with IP 192.168.4.1
+  5. Config mode - able to set and save SSID and password, and Blynk token
+  6. Config mode - tries to connect to wifi
+  7. Config mode times out after 3 mins
+  8. If not connected, Blynk functions are not enabled and switch is offline only - key functions still work
+  9. Goes into normal running mode - Control LED flashes normally
+
+Running mode:
+  1. LED starts off
+  2. Sin
+
+ */
+
 #define DEBUG
 #include <DebugUtils.h>
 
@@ -39,19 +81,15 @@ const static int LED_DIM_NORMAL = 5;
 const static int LED_DIM_FAST = 10;
 const static int LED_DIM_VERYFAST = 20;
 
-pwmLED outputLED( OUTPUT_PIN, false, PWM_LED_LEVEL_IN_MAX, LED_DIM_NORMAL, PWM_LED_MODE_BINARY );            // Main output LED
-pwmLED ctrlLED( CTRL_LED, true, 0, LED_DIM_FAST, PWM_LED_MODE_CYCLICK );                 // Control LED
+pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL );                           // Main output LED
+pwmLED ctrlLED( CTRL_LED, true, 0, LED_DIM_FAST );                                    // Control LED
 
-// For LEDs
-
-Ticker updateLEDs;
+Ticker updateLEDs;                 // LED update timer
 
 void updateLEDtick()
 {  
   ctrlLED.autoDim();               // Move control LED to next dim level
   outputLED.autoDim();             // Move output LED to next dim level
-
-  DEBUG_PRINT("~");
 }
 
 
@@ -90,9 +128,10 @@ void configModeCallback (WiFiManager *myWiFiManager)
 {
   DEBUG_PRINTLN("Entered config mode");
   DEBUG_PRINTLN(WiFi.softAPIP());
-  DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());      //if you used auto generated SSID, print it
+  DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());    // If you used auto generated SSID, print it
   
-  ctrlLED.setDimRate( LED_DIM_VERYFAST );         // Entered config mode, make led toggle faster
+  ctrlLED.setDimRate( LED_DIM_VERYFAST );                 // Entered config mode, make led toggle faster
+  ctrlLED.dimLED(true,true);                              // Start cyclick flashing
 }
 
 
@@ -216,9 +255,10 @@ void setup()
   // Setup EEPROM
   EEPROM.begin(EEPROM_MAX);
 
-  // start flashing as we start in AP mode and try to connect
+  // start LED update timer
   updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);
-
+  ctrlLED.setDimRate( LED_DIM_FAST );             // Flash LED for setup operation
+  
   // Turn on serial
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);
@@ -304,7 +344,7 @@ void setup()
 
   if( isOnline ) Blynk.config(blynk_token);         // Configure Blynk session
 
-  ctrlLED.setDimRate( LED_DIM_NORMAL );           // Flash LED for normal operation
+  ctrlLED.setDimRate( LED_DIM_NORMAL );             // Flash LED for normal operation
 
   if( isOnline ) updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);    // Start Blynk LED flashing
   
@@ -326,7 +366,17 @@ void loop()
   
   // Payloads
 
-  if(actionBtn.longPress()) doReset();                // If long press then restart
-  if(actionBtn.pushed()) outputLED.toggleState();     // LED on or off
+  if(actionBtn.pushed())
+  {
+    if( outputLED.getState() ) outputLED.dimLED(true, false);       // If pushed and on then start dimming
+    else outputLED.setState(true);                                  // If pushed and off then turn on
+  }
+
+  if(actionBtn.released()) outputLED.dimLED(false, false);          // If released then stop dimming
+    
+  if(actionBtn.doubleClick()) outputLED.toggleState();              // If double click then toggle state
+  
+  if(actionBtn.longPress()) doReset();                              // If long press then restart
+
 }
 
