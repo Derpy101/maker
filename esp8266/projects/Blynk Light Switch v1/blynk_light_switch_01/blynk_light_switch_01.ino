@@ -180,8 +180,8 @@ void doReset( bool hard = false )
 #endif
 
 // Virtual pin assignments
-#define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
 #define BLYK_CTRL_LED   0             // Virtual pin showing normal operation
+#define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
 #define BLNK_MAIN_BTN   2             // Virtual pin to match main button
 #define BLNK_DIMMER     3             // Virtual pin for dimmer slider
 #define BLNK_GAUGE      4             // Virtual pin for return level
@@ -369,8 +369,8 @@ void loop()
   if( actionBtn.doubleClick() ) outputLED.toggleState();                        // If double click then toggle state
   else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on(), false);      // Dim if on and pushed
   else if( actionBtn.singleClick() ) outputLED.setState(true);                  // If clicked and off then turn on
+  else if( isOnline && actionBtn.released() ) Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
  
   if(actionBtn.longPress()) doReset();                                          // If long press then restart
-  
 }
 
