@@ -19,9 +19,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-*/
 
-/*
+-------------------------------------------------------------------------------------
 
 On start up:
   1. Tries to connect to saved wifi settings if they exist - Control LED fast flashes
@@ -36,7 +35,8 @@ On start up:
 
 Running mode:
   1. LED starts off
-  2. Sin
+  2. Double click toggle on or off
+  3. Press and hold to dim
 
  */
 
@@ -48,10 +48,10 @@ extern "C" {
 }
 
 #include <BlynkSimpleEsp8266.h>
-#include <WiFiManager.h>
 #include <EepromUtil.h>
-#include <Switch.h>
+#include <WiFiManager.h>
 #include <Ticker.h>
+#include "Switch_v2.h"
 #include "PWM_LED_control.h"
 
 
@@ -131,7 +131,6 @@ void configModeCallback (WiFiManager *myWiFiManager)
   DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());    // If you used auto generated SSID, print it
   
   ctrlLED.setDimRate( LED_DIM_VERYFAST );                 // Entered config mode, make led toggle faster
-  ctrlLED.dimLED(true,true);                              // Start cyclick flashing
 }
 
 
@@ -242,7 +241,7 @@ const static int LONG_PRESS = 20000;       // Need to press for 20s to initiate 
 const static int DEBOUNCE = 50;            // 50ms for switch debounce
 const static int START_TIME = 10000;       // 10 secs at start up to go into config mode
 
-Switch actionBtn(INPUT_PIN, INPUT, LOW, DEBOUNCE, LONG_PRESS );
+Switch actionBtn(INPUT_PIN, INPUT, LOW, DEBOUNCE, LONG_PRESS );         // Setup switch management
 
 
 // Main Setup
@@ -255,9 +254,10 @@ void setup()
   // Setup EEPROM
   EEPROM.begin(EEPROM_MAX);
 
-  // start LED update timer
-  updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);
-  ctrlLED.setDimRate( LED_DIM_FAST );             // Flash LED for setup operation
+  // Setup control LED
+  updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);   // start LED update timer
+  ctrlLED.setDimRate( LED_DIM_FAST );                     // Flash LED for setup operation
+  ctrlLED.dimLED(true,true);                              // Start cyclick flashing
   
   // Turn on serial
   #ifdef DEBUG
