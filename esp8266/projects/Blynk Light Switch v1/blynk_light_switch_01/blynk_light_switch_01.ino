@@ -47,10 +47,10 @@ extern "C" {
 #include "user_interface.h"
 }
 
-#include <BlynkSimpleEsp8266.h>
-#include <EepromUtil.h>
 #include <WiFiManager.h>
 #include <Ticker.h>
+#include <BlynkSimpleEsp8266.h>
+#include <EepromUtil.h>
 #include "Switch_v2.h"
 #include "PWM_LED_control.h"
 
@@ -366,17 +366,11 @@ void loop()
   
   // Payloads
 
-  if(actionBtn.pushed())
-  {
-    if( outputLED.getState() ) outputLED.dimLED(true, false);       // If pushed and on then start dimming
-    else outputLED.setState(true);                                  // If pushed and off then turn on
-  }
-
-  if(actionBtn.released()) outputLED.dimLED(false, false);          // If released then stop dimming
-    
-  if(actionBtn.doubleClick()) outputLED.toggleState();              // If double click then toggle state
+  if( actionBtn.doubleClick() ) outputLED.toggleState();                        // If double click then toggle state
+  else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on(), false);      // Dim if on and pushed
+  else if( actionBtn.singleClick() ) outputLED.setState(true);                  // If clicked and off then turn on
+ 
+  if(actionBtn.longPress()) doReset();                                          // If long press then restart
   
-  if(actionBtn.longPress()) doReset();                              // If long press then restart
-
 }
 

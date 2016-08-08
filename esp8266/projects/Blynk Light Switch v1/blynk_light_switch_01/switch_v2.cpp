@@ -70,6 +70,21 @@ Modified with addition of SingleClick by Chris Gregg, 2016
                                               _
  _doubleClick     ___________________________| |__________________________________
  
+........................................SINGLE CLICK..............................
+                                         
+                           __________                              
+ debounced        ________|          |____________________________________________  
+ 
+ poll            ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^ ^          
+                           _                 
+ pushed          _________| |_____________________________________________________       
+                                                     
+ pushedTime               ^         
+ 
+ doubleClickPeriod         <------------------------------------->                     
+                                                                   _
+ _SingleClick     ________________________________________________| |_____________
+ 
                              
 ........................................LONG PRESS................................
                                           
@@ -145,7 +160,8 @@ void inline Switch::calcClick()
     _doubleClick = (ms - pushedTime) < doubleClickPeriod; // pushedTime of previous push
     pushedTime = ms;
   }
-  _singleClick = singleClickStarted && ((ms - pushedTime) > doubleClickPeriod); // pushedTime of previous push
+  _singleClick = singleClickStarted && !_doubleClick && ((ms - pushedTime) > doubleClickPeriod); // pushedTime of previous push
+  if(_singleClick || _doubleClick) singleClickStarted = false;
 } 
  
 void inline Switch::calcLongPress()
