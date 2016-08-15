@@ -52,12 +52,16 @@ Level is a percentage.
 
 
 // Constructor
-pwmLED::pwmLED( int outputPin, bool startState, int startLevel, int dimRate )
+pwmLED::pwmLED( int outputPin, bool startState, int startLevel, int dimRate, bool isCyclick )
 {
   _outputPin = outputPin;         // Set output pin for this instance
   _outputLevel = startLevel;      // Set starting dim level
   _outputState = startState;      // Set starting state
   _dimRate = dimRate;             // Set starting dim rate
+  _isCyclick = isCyclick;         // Set mode
+
+  if( startLevel > 75 ) _dimUp = false;
+  if( startLevel < 25 ) _dimUp = true;
 
   pinMode(_outputPin, OUTPUT);
 }
@@ -73,6 +77,8 @@ bool pwmLED::getState()
 // Set state
 void pwmLED::setState(bool newState)
 {
+  _isOverrun = false;
+  
   if( newState != _outputState )          /// Do nothing if no change in state
   {
     _outputState = newState;
@@ -125,39 +131,50 @@ void pwmLED::setPinPWM( int newLevel )
   DEBUG_PRINT(" : Level set to ");
   DEBUG_PRINT( newLevel );
   DEBUG_PRINT(", PWM set to ");
-  DEBUG_PRINTLN( newOutputPWM );
+  DEBUG_PRINT( newOutputPWM );
+  DEBUG_PRINT(", Direction: ");
+  DEBUG_PRINT( _dimUp );
+  DEBUG_PRINT(", Overrun: ");
+  DEBUG_PRINTLN( _isOverrun );
 }
 
 
 // Step to next auto dim level - typically called by a timer
 void pwmLED::autoDim()
 {
-  if( !_dimLED ) return;
-  
+  if( !_outputState || !_dimLED || _isOverrun ) return;
+ 
   // Go up or down
   
   if( _dimUp ) _outputLevel += _dimRate;
   else _outputLevel -= _dimRate;
 
   // No over/under run
-  if( _outputLevel >= _PWM_LED_LEVEL_IN_MAX ) _outputLevel = _PWM_LED_LEVEL_IN_MAX;
-  if( _outputLevel <= 0 ) _outputLevel = 0; 
-
-  if( _isCyclick )         // Change direction
+  if( _dimUp && _outputLevel >= _PWM_LED_LEVEL_IN_MAX )
   {
-    if( _outputLevel == _PWM_LED_LEVEL_IN_MAX ) _dimUp = false;
-    
-    if( _outputLevel == 0 ) _dimUp = true;
+    _outputLevel = _PWM_LED_LEVEL_IN_MAX;
+    _dimUp = !_isCyclick;
+    _dimLED = _isCyclick;
+    _isOverrun = !_isCyclick;
+  }
+  
+  if( !_dimUp && _outputLevel <= 0 )
+  {
+    _outputLevel = 0; 
+    _dimUp = _isCyclick;
+    _dimLED = _isCyclick;
+    _isOverrun = !_isCyclick;
   }
 
-  if( _outputState ) this->setPinPWM( _outputLevel );   // If on, then set it.
+  this->setPinPWM( _outputLevel );   // Set it.
 }
 
 
 // Set dim direction
-void pwmLED::setDimDirection(int dimUp)
+void pwmLED::toggleDimDirection()
 {
-  _dimUp = dimUp;
+  _isOverrun = false;
+  _dimUp = !_dimUp;
 }
 
 
@@ -169,16 +186,8 @@ void pwmLED::setDimRate(int dimRate)
 
 
 // Dim the LED
-void pwmLED::dimLED(bool startDimming, bool isCyclick)
+void pwmLED::dimLED(bool startDimming)
 {
-  if( !isCyclick && startDimming )
-  {
-    if( _outputLevel == _PWM_LED_LEVEL_IN_MAX ) _dimUp = false;
-    
-    if( _outputLevel == 0 ) _dimUp = true;
-  }
-
   _dimLED = startDimming;
-  _isCyclick = isCyclick;
 }
 

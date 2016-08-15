@@ -17,7 +17,7 @@ class pwmLED {
 public:
 
   // Constructor
-  pwmLED( int outputPin, bool startState, int startLevel, int dimRate );
+  pwmLED( int outputPin, bool startState, int startLevel, int dimRate, bool isCyclick );
 
   // Get the current state
   bool getState();
@@ -41,10 +41,10 @@ public:
   void setDimRate(int dimRate);
 
   // Set dim direction
-  void setDimDirection(int dimUp);
+  void toggleDimDirection();
   
   // Set dim mode
-  void dimLED(bool startDimming, bool isCyclick);
+  void dimLED(bool startDimming);
   
 private:
 
@@ -66,6 +66,7 @@ private:
   bool _dimUp = true;
   bool _dimLED = false;
   bool _isCyclick = false;
+  bool _isOverrun = false;
 
   // Update the pin PWM
   void setPinPWM( int newLevel );

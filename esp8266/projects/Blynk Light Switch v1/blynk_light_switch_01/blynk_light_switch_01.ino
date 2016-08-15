@@ -53,6 +53,8 @@ extern "C" {
 #include <EepromUtil.h>
 #include "Switch_v2.h"
 #include "PWM_LED_control.h"
+#include <SimpleTimer.h>
+
 
 
 // Define GPIO pins and UART
@@ -61,34 +63,24 @@ extern "C" {
 #define OUTPUT_PIN    0               // GPIO 0 is the output pin
 #define INPUT_PIN     2               // GPIO 2 is the main input pin
 
-// If DEBUG, serial is running, so control LED goes to unconnceted GPIO pin
-
-#ifdef DEBUG
-  #define CTRL_LED    5               
-#else
-  #define CTRL_LED    1               // Using TX port on ESP-01
-#endif
-
 const static int SERIAL_SPEED = 115200;          // Serial port speed
 
 
 // Setup Output LEDs
 // -----------------
 
-const static int LED_UPRATE_RATE = 50;
+const static int LED_UPRATE_RATE = 100;
 
 const static int LED_DIM_NORMAL = 5;
 const static int LED_DIM_FAST = 10;
 const static int LED_DIM_VERYFAST = 20;
 
-pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL );                           // Main output LED
-pwmLED ctrlLED( CTRL_LED, true, 0, LED_DIM_FAST );                                    // Control LED
+pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false );                           // Main output LED
 
 Ticker updateLEDs;                 // LED update timer
 
 void updateLEDtick()
 {  
-  ctrlLED.autoDim();               // Move control LED to next dim level
   outputLED.autoDim();             // Move output LED to next dim level
 }
 
@@ -129,8 +121,6 @@ void configModeCallback (WiFiManager *myWiFiManager)
   DEBUG_PRINTLN("Entered config mode");
   DEBUG_PRINTLN(WiFi.softAPIP());
   DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());    // If you used auto generated SSID, print it
-  
-  ctrlLED.setDimRate( LED_DIM_VERYFAST );                 // Entered config mode, make led toggle faster
 }
 
 
@@ -142,8 +132,6 @@ void doReset( bool hard = false )
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);       // Turn on serial
   #endif
-  
-  ctrlLED.setDimRate( LED_DIM_VERYFAST );     // Make led toggle faster 
   
   DEBUG_PRINTLN( "Starting reset" );
   
@@ -188,7 +176,7 @@ void doReset( bool hard = false )
 #define BLNK_RESET      30            // Virtual pin to trigger a reset
 #define BLNK_HARDRESET  31            // Virtual pin to trigger a hard reset (clearing wifi settings)
 
-const static int BLNK_FLASH_TIME = 15000;                       // Period of Blynk flash
+const static int BLNK_FLASH_TIME = 2000;                       // Period of Blynk flash
 const static char BLNK_PARAM_PROMPT[] = "Enter Blynk token";
 const static char BLNK_PARAM_ID[] = "blnk_token";
 
@@ -220,17 +208,18 @@ BLYNK_WRITE(BLNK_MAIN_BTN)
 BLYNK_WRITE(BLNK_DIMMER)
 {
   outputLED.setLevel( param.asInt() );         // Virtual pin set 0-100
+  Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
 }
 
 // Flash Blynk control LED
 
-Ticker updateBlnkLED;
+SimpleTimer blnkFlashTimer;
 bool blnkFlash = false;
 
-void blnkLEDtick()
-{  
-  Blynk.virtualWrite(BLYK_CTRL_LED, blnkFlash*255);       // Toggle state of control LED
-  blnkFlash = !blnkFlash; 
+void flashBlnkLED()
+{
+  Blynk.virtualWrite(BLYK_CTRL_LED, blnkFlash*255);
+  blnkFlash = !blnkFlash;
 }
 
 
@@ -256,14 +245,12 @@ void setup()
 
   // Setup control LED
   updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);   // start LED update timer
-  ctrlLED.setDimRate( LED_DIM_FAST );                     // Flash LED for setup operation
-  ctrlLED.dimLED(true,true);                              // Start cyclick flashing
-  
+
   // Turn on serial
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);
     DEBUG_PRINTLN( "\n\n" );
-    DEBUG_PRINTVB("Debug ON");
+    DEBUG_PRINTLN("Debug ON");
   #else
     wifiManager.setDebugOutput(false);
   #endif
@@ -305,7 +292,7 @@ void setup()
   wifiManager.setAPCallback(configModeCallback);
 
   // Set Wifi autoconnect timeout
-  wifiManager.setConfigPortalTimeout(WIFI_TIMEOUT);   
+  wifiManager.setTimeout(WIFI_TIMEOUT);   
 
   // Try to connect to Wifi - if not, the run captive portal
   // If still no connect, then restart and try again
@@ -344,9 +331,7 @@ void setup()
 
   if( isOnline ) Blynk.config(blynk_token);         // Configure Blynk session
 
-  ctrlLED.setDimRate( LED_DIM_NORMAL );             // Flash LED for normal operation
-
-  if( isOnline ) updateBlnkLED.attach_ms(BLNK_FLASH_TIME, blnkLEDtick);    // Start Blynk LED flashing
+  if( isOnline ) blnkFlashTimer.setInterval(BLNK_FLASH_TIME, flashBlnkLED);   // Start Blynk LED flashing
   
   DEBUG_PRINTLN( "Up and running ..." );
 
@@ -367,10 +352,12 @@ void loop()
   // Payloads
 
   if( actionBtn.doubleClick() ) outputLED.toggleState();                        // If double click then toggle state
-  else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on(), false);      // Dim if on and pushed
-  else if( actionBtn.singleClick() ) outputLED.setState(true);                  // If clicked and off then turn on
-  else if( isOnline && actionBtn.released() ) Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
+  else if( actionBtn.released() ) outputLED.toggleDimDirection();
+  else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on());      // Dim if on and pushed
  
-  if(actionBtn.longPress()) doReset();                                          // If long press then restart
+//  else if( actionBtn.singleClick() ) outputLED.setState(true);                  // If clicked and off then turn on
+//  else if( isOnline && actionBtn.released() ) Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
+ 
+//  if(actionBtn.longPress()) doReset();                                          // If long press then restart
 }
 
