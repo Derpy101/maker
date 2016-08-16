@@ -69,13 +69,13 @@ const static int SERIAL_SPEED = 115200;          // Serial port speed
 // Setup Output LEDs
 // -----------------
 
-const static int LED_UPRATE_RATE = 100;
+const static int LED_UPRATE_RATE = 20;
 
-const static int LED_DIM_NORMAL = 5;
-const static int LED_DIM_FAST = 10;
-const static int LED_DIM_VERYFAST = 20;
+const static int LED_DIM_NORMAL = 1;
+const static int LED_DIM_FAST = 5;
+const static int LED_DIM_VERYFAST = 10;
 
-pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false );                           // Main output LED
+pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false, false );                           // Main output LED
 
 Ticker updateLEDs;                 // LED update timer
 
@@ -201,6 +201,7 @@ BLYNK_WRITE(BLNK_HARDRESET)
 BLYNK_WRITE(BLNK_MAIN_BTN)
 {
   if( param.asInt() != 0 ) outputLED.toggleState();       // Toggle LED state
+  Blynk.virtualWrite(BLYK_MAIN_LED, outputLED.getState()*255);       // update Blynk LED
 }
 
 // Dimmer changed
@@ -249,7 +250,11 @@ void setup()
   // Turn on serial
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);
-    DEBUG_PRINTLN( "\n\n" );
+    DEBUG_PRINTLN( "" );
+    DEBUG_PRINTLN("--------------");
+    DEBUG_PRINTLN(" Blynk Switch ");
+    DEBUG_PRINTLN("--------------");
+    DEBUG_PRINTLN( "" );
     DEBUG_PRINTLN("Debug ON");
   #else
     wifiManager.setDebugOutput(false);
@@ -351,13 +356,30 @@ void loop()
   
   // Payloads
 
-  if( actionBtn.doubleClick() ) outputLED.toggleState();                        // If double click then toggle state
+  if( actionBtn.doubleClick() )
+  {
+    if( outputLED.getLevel() == 0 )
+    {
+      outputLED.setLevel(100);
+      outputLED.setDimDirection(true);
+    }
+    outputLED.toggleState();                                        // If double click then toggle state
+  }
   else if( actionBtn.released() ) outputLED.toggleDimDirection();
   else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on());      // Dim if on and pushed
+  else if( actionBtn.singleClick() )
+  {
+      outputLED.setLevel(0);
+      outputLED.setDimDirection(true);
+      outputLED.setState(true);                  // If clicked and off then turn on
+  }
+  
+  if( isOnline && actionBtn.released() )
+  {
+//    Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
+//    Blynk.virtualWrite(BLYK_MAIN_LED, outputLED.getState()*255);       // update Blynk LED
+  }
  
-//  else if( actionBtn.singleClick() ) outputLED.setState(true);                  // If clicked and off then turn on
-//  else if( isOnline && actionBtn.released() ) Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
- 
-//  if(actionBtn.longPress()) doReset();                                          // If long press then restart
+  if(actionBtn.longPress()) doReset();                                          // If long press then restart
 }
 
