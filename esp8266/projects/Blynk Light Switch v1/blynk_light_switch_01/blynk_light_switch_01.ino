@@ -22,6 +22,8 @@ SOFTWARE.
 
 -------------------------------------------------------------------------------------
 
+Configured for ESP-01
+
 On start up:
   1. Tries to connect to saved wifi settings if they exist - Control LED fast flashes
   2. If button pressed for a more than 30sec, then reset wifi settings
@@ -250,6 +252,7 @@ void setup()
   // Turn on serial
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);
+    DEBUG_PRINTLN( "" );
     DEBUG_PRINTLN( "" );
     DEBUG_PRINTLN("--------------");
     DEBUG_PRINTLN(" Blynk Switch ");
