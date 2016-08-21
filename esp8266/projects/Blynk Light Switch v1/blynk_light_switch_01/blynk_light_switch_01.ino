@@ -22,18 +22,19 @@ SOFTWARE.
 
 -------------------------------------------------------------------------------------
 
-Configured for ESP-01
+Configured for ESP-12
 
 On start up:
-  1. Tries to connect to saved wifi settings if they exist - Control LED fast flashes
-  2. If button pressed for a more than 30sec, then reset wifi settings
+  1. Tries to connect to saved wifi settings if they exist - control LED flashes orange
+  2. If button pressed for a more than 10sec, then reset wifi settings
   3. If no wifi or reset wifi settings go into configuration mode - Control LED very fast flashes
   4. Config mode - creates AP with SSID "BlynkSwitch", with IP 192.168.4.1
   5. Config mode - able to set and save SSID and password, and Blynk token
   6. Config mode - tries to connect to wifi
-  7. Config mode times out after 3 mins
+  7. Config mode times out after 90 seconds
   8. If not connected, Blynk functions are not enabled and switch is offline only - key functions still work
-  9. Goes into normal running mode - Control LED flashes normally
+  9. Goes into normal running mode
+  10. Control LED flashes blue if online or orange if offline
 
 Running mode:
   1. LED starts off
@@ -62,8 +63,10 @@ extern "C" {
 // Define GPIO pins and UART
 // -------------------------
 
-#define OUTPUT_PIN    0               // GPIO 0 is the output pin
-#define INPUT_PIN     2               // GPIO 2 is the main input pin
+#define OUTPUT_PIN    4               // GPIO 4 is the LED
+#define INPUT_PIN     2               // GPIO 2 is button
+#define BLUE_LED_PIN  0               // GPIO 0 is Blue LED
+#define ORANGE_LED_PIN  5             // GPIO 5 is the orange LED
 
 const static int SERIAL_SPEED = 115200;          // Serial port speed
 
@@ -77,20 +80,26 @@ const static int LED_DIM_NORMAL = 1;
 const static int LED_DIM_FAST = 5;
 const static int LED_DIM_VERYFAST = 10;
 
-pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false, false );                           // Main output LED
+pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false, false );         // Main output LED
+pwmLED blueLED( BLUE_LED_PIN, false, 100, LED_DIM_NORMAL, false, true );          // Blue LED
+pwmLED orangeLED( ORANGE_LED_PIN, false, 100, LED_DIM_NORMAL, false, true );      // Orange LED
 
 Ticker updateLEDs;                 // LED update timer
 
 void updateLEDtick()
-{  
-  outputLED.autoDim();             // Move output LED to next dim level
+{
+  // Move output LED to next dim level
+  
+  outputLED.autoDim();
+  blueLED.autoDim();
+  orangeLED.autoDim();
 }
 
 
 // Wifi Settings
 // -------------
 
-const static int WIFI_TIMEOUT = 180;              // Three minutes
+const static int WIFI_TIMEOUT = 90;               // 90 seconds
 const static int EEPROM_MAX = 512;                // Max spaced used in EEPROM
 const static char SSID_NAME[] = "BlynkSwitch";
 
@@ -123,6 +132,8 @@ void configModeCallback (WiFiManager *myWiFiManager)
   DEBUG_PRINTLN("Entered config mode");
   DEBUG_PRINTLN(WiFi.softAPIP());
   DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());    // If you used auto generated SSID, print it
+
+  orangeLED.setDimRate(LED_DIM_FAST);
 }
 
 
@@ -136,6 +147,10 @@ void doReset( bool hard = false )
   #endif
   
   DEBUG_PRINTLN( "Starting reset" );
+
+  orangeLED.setDimRate(LED_DIM_VERYFAST);
+  blueLED.setState(false);
+  orangeLED.setState(true);
   
   delay(1000);
 
@@ -188,6 +203,8 @@ const static char BLNK_PARAM_ID[] = "blnk_token";
 
 BLYNK_WRITE(BLNK_RESET)
 {
+  DEBUG_PRINTLN( "Blynk reset" );
+
   doReset();                    // Soft reset
 }
 
@@ -195,6 +212,8 @@ BLYNK_WRITE(BLNK_RESET)
 
 BLYNK_WRITE(BLNK_HARDRESET)
 {
+  DEBUG_PRINTLN( "Blynk hard reset" );
+
   doReset(true);                // Hard reset (clear settings)
 }
 
@@ -202,15 +221,15 @@ BLYNK_WRITE(BLNK_HARDRESET)
 
 BLYNK_WRITE(BLNK_MAIN_BTN)
 {
-  if( param.asInt() != 0 ) outputLED.toggleState();       // Toggle LED state
-  Blynk.virtualWrite(BLYK_MAIN_LED, outputLED.getState()*255);       // update Blynk LED
+  if( param.asInt() != 0 ) outputLED.toggleState();                   // Toggle LED state
+  Blynk.virtualWrite(BLYK_MAIN_LED, outputLED.getState()*255);        // Update Blynk LED
 }
 
 // Dimmer changed
 
 BLYNK_WRITE(BLNK_DIMMER)
 {
-  outputLED.setLevel( param.asInt() );         // Virtual pin set 0-100
+  outputLED.setLevel( param.asInt() );                        // Virtual pin set 0-100
   Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
 }
 
@@ -229,7 +248,7 @@ void flashBlnkLED()
 // Switch functions
 // ----------------
 
-const static int LONG_PRESS = 20000;       // Need to press for 20s to initiate long press
+const static int LONG_PRESS = 10000;       // Need to press for 20s to initiate long press
 const static int DEBOUNCE = 50;            // 50ms for switch debounce
 const static int START_TIME = 10000;       // 10 secs at start up to go into config mode
 
@@ -242,14 +261,23 @@ Switch actionBtn(INPUT_PIN, INPUT, LOW, DEBOUNCE, LONG_PRESS );         // Setup
 bool isOnline = false;          // Did we initially get connecteed
 
 void setup()
-{  
+{     
   // Setup EEPROM
+  
   EEPROM.begin(EEPROM_MAX);
 
-  // Setup control LED
+  // Setup LEDs
+
+  analogWriteFreq( 100 );                                 // Slow down the PWM duty cycle to give MOSFET time to respond
   updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);   // start LED update timer
 
+  orangeLED.setState(true);
+  orangeLED.dimLED(true);
+  blueLED.setState(false);
+  blueLED.dimLED(true);
+
   // Turn on serial
+  
   #ifdef DEBUG
     Serial.begin(SERIAL_SPEED);
     DEBUG_PRINTLN( "" );
@@ -278,9 +306,7 @@ void setup()
     
     if(actionBtn.on()) startMillis = millis();
 
-    // If long press then reset setttings
-
-    if(actionBtn.longPress())
+    if(actionBtn.longPress())           // If long press then reset setttings
     {
       // Reset the Wifi settings
       DEBUG_PRINTLN( "Clearing settings" );
@@ -299,23 +325,17 @@ void setup()
   wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.setAPCallback(configModeCallback);
 
-  // Set Wifi autoconnect timeout
-  wifiManager.setTimeout(WIFI_TIMEOUT);   
-
-  // Try to connect to Wifi - if not, the run captive portal
-  // If still no connect, then restart and try again
+  wifiManager.setTimeout(WIFI_TIMEOUT);                       // Set Wifi autoconnect timeout
   
   shouldSaveConfig = false;
 
-  isOnline = wifiManager.autoConnect( SSID_NAME );          // Try to connect
+  isOnline = wifiManager.autoConnect( SSID_NAME );            // Try to connect to Wifi - if not, the run captive portal
   
   if( !isOnline ) DEBUG_PRINTLN("Failed to connect and hit timeout");
   
-  // If new config loaded, then save to EEPROM
-  if( shouldSaveConfig )
+  if( shouldSaveConfig )                                     // If new config loaded, then save to EEPROM
   {
-    // Copy values from parameters
-    strcpy(blynk_token, custom_blynk_token.getValue());  
+    strcpy(blynk_token, custom_blynk_token.getValue());      // Copy values from parameters
 
     DEBUG_PRINT( "New token: -" );
     DEBUG_PRINT( blynk_token );
@@ -330,17 +350,18 @@ void setup()
     DEBUG_PRINTLN( "Using saved token" );
   }
 
-  // Read Blynk token from EEPROM
-  EepromUtil::eeprom_read_string(0, blynk_token, 34 );
+  EepromUtil::eeprom_read_string(0, blynk_token, 34 );      // Read Blynk token from EEPROM
 
   DEBUG_PRINT( "Read token: -" );
   DEBUG_PRINT( blynk_token ); 
   DEBUG_PRINTLN( "-" );
 
-  if( isOnline ) Blynk.config(blynk_token);         // Configure Blynk session
+  if( isOnline ) Blynk.config(blynk_token);                 // Configure Blynk session
 
   if( isOnline ) blnkFlashTimer.setInterval(BLNK_FLASH_TIME, flashBlnkLED);   // Start Blynk LED flashing
-  
+
+  orangeLED.setDimRate(LED_DIM_NORMAL);                     // Normal mode
+
   DEBUG_PRINTLN( "Up and running ..." );
 
   delay(1000);
@@ -359,30 +380,33 @@ void loop()
   
   // Payloads
 
-  if( actionBtn.doubleClick() )
+  blueLED.setState((!actionBtn.on())^(!isOnline));  // If online then blue flashing and orange when pressed
+  orangeLED.setState((actionBtn.on())^(!isOnline)); // If offline then vise versa
+  
+  if( actionBtn.on() )                               // Do flashing  when pressed
   {
-    if( outputLED.getLevel() == 0 )
+    blueLED.setLevel(100);
+    orangeLED.setLevel(100);
+  }
+
+  if( actionBtn.doubleClick() )                     // Toggle on/offf
+  {
+    if( outputLED.getLevel() == 0 )                 // If off then set dim to full on
     {
       outputLED.setLevel(100);
       outputLED.setDimDirection(true);
     }
-    outputLED.toggleState();                                        // If double click then toggle state
+    outputLED.toggleState();                                            // If double click then toggle state
   }
-  else if( actionBtn.released() ) outputLED.toggleDimDirection();
-  else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on());      // Dim if on and pushed
-  else if( actionBtn.singleClick() )
+  else if( actionBtn.released() ) outputLED.toggleDimDirection();       // Change dim direction on release
+  else if( outputLED.getState() ) outputLED.dimLED(actionBtn.on());     // Dim if on and pushed
+  else if( actionBtn.singleClick() )                                    // Click to dim
   {
       outputLED.setLevel(0);
       outputLED.setDimDirection(true);
-      outputLED.setState(true);                  // If clicked and off then turn on
+      outputLED.setState(true);
   }
-  
-  if( isOnline && actionBtn.released() )
-  {
-//    Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
-//    Blynk.virtualWrite(BLYK_MAIN_LED, outputLED.getState()*255);       // update Blynk LED
-  }
- 
-  if(actionBtn.longPress()) doReset();                                          // If long press then restart
+   
+  if(actionBtn.longPress()) doReset();                                  // If long press then restart
 }
 

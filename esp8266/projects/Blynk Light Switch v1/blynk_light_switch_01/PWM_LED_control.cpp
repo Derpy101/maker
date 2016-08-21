@@ -46,7 +46,6 @@ Level is a percentage.
 
 */
 
-
 //#define DEBUG
 #include "PWM_LED_control.h"
 
@@ -121,6 +120,8 @@ void pwmLED::setPinPWM( int newLevel )
   int newOutputPWM = (int)(pow( (float)newLevel/(float)_PWM_LED_LEVEL_IN_MAX, 1/0.5 ) * (float)_PWM_MAX);       // Exponetial linearization
 
 //  int newOutputPWM = (int)((float)_PWM_MAX/(1.0 + exp(-14.0*(((float)newLevel/50.0)/100))));                          // S-curve linearization
+
+//  int newOutputPWM = map(newLevel, 0, _PWM_LED_LEVEL_IN_MAX, 0, _PWM_MAX);
 
   analogWrite( _outputPin, newOutputPWM );   // Set output
 
