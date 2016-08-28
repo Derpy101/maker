@@ -34,7 +34,7 @@ On start up:
   7. Config mode times out after 90 seconds
   8. If not connected, Blynk functions are not enabled and switch is offline only - key functions still work
   9. Goes into normal running mode
-  10. Control LED flashes blue if online or orange if offline
+  10. Control LED blue if online or orange if offline
 
 Running mode:
   1. LED starts off
@@ -56,8 +56,6 @@ extern "C" {
 #include <EepromUtil.h>
 #include "Switch_v2.h"
 #include "PWM_LED_control.h"
-#include <SimpleTimer.h>
-
 
 
 // Define GPIO pins and UART
@@ -67,6 +65,7 @@ extern "C" {
 #define INPUT_PIN     2               // GPIO 2 is button
 #define BLUE_LED_PIN  0               // GPIO 0 is Blue LED
 #define ORANGE_LED_PIN  5             // GPIO 5 is the orange LED
+#define DEBUG_PIN 13                  // GPIO 13 is used for debug
 
 const static int SERIAL_SPEED = 115200;          // Serial port speed
 
@@ -80,21 +79,28 @@ const static int LED_DIM_NORMAL = 1;
 const static int LED_DIM_FAST = 5;
 const static int LED_DIM_VERYFAST = 10;
 
-pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false, false );         // Main output LED
-pwmLED blueLED( BLUE_LED_PIN, false, 100, LED_DIM_NORMAL, false, true );          // Blue LED
-pwmLED orangeLED( ORANGE_LED_PIN, false, 100, LED_DIM_NORMAL, false, true );      // Orange LED
+const static int FLASH_NORMAL = 800;
+const static int FLASH_FAST = 400;
+const static int FLASH_VERYFAST = 100;
 
-Ticker updateLEDs;                 // LED update timer
+pwmLED outputLED( OUTPUT_PIN, false, 100, LED_DIM_NORMAL, false, false );         // Main output LED
+
+Ticker updateLEDs;          // LED update timer
 
 void updateLEDtick()
 {
-  // Move output LED to next dim level
-  
-  outputLED.autoDim();
-  blueLED.autoDim();
-  orangeLED.autoDim();
+  outputLED.autoDim();      // Move output LED to next dim level
 }
 
+
+Ticker flashLEDs;                 // LED flash timer
+
+bool flashOrange = false;         // Is it flashing
+
+void flashLEDtick()
+{
+  if( flashOrange ) digitalWrite(ORANGE_LED_PIN, !digitalRead(ORANGE_LED_PIN));
+}
 
 // Wifi Settings
 // -------------
@@ -133,7 +139,7 @@ void configModeCallback (WiFiManager *myWiFiManager)
   DEBUG_PRINTLN(WiFi.softAPIP());
   DEBUG_PRINTLN(myWiFiManager->getConfigPortalSSID());    // If you used auto generated SSID, print it
 
-  orangeLED.setDimRate(LED_DIM_FAST);
+  flashLEDs.attach_ms(FLASH_FAST, flashLEDtick);          // Flash orange fast
 }
 
 
@@ -148,9 +154,11 @@ void doReset( bool hard = false )
   
   DEBUG_PRINTLN( "Starting reset" );
 
-  orangeLED.setDimRate(LED_DIM_VERYFAST);
-  blueLED.setState(false);
-  orangeLED.setState(true);
+  flashLEDs.attach_ms(FLASH_VERYFAST, flashLEDtick);   // Flash orange LED
+  flashOrange = true;
+  
+  digitalWrite(BLUE_LED_PIN,LOW);
+  outputLED.setState(false);
   
   delay(1000);
 
@@ -185,7 +193,6 @@ void doReset( bool hard = false )
 #endif
 
 // Virtual pin assignments
-#define BLYK_CTRL_LED   0             // Virtual pin showing normal operation
 #define BLYK_MAIN_LED   1             // Virtual pin used for showing main control input
 #define BLNK_MAIN_BTN   2             // Virtual pin to match main button
 #define BLNK_DIMMER     3             // Virtual pin for dimmer slider
@@ -193,7 +200,6 @@ void doReset( bool hard = false )
 #define BLNK_RESET      30            // Virtual pin to trigger a reset
 #define BLNK_HARDRESET  31            // Virtual pin to trigger a hard reset (clearing wifi settings)
 
-const static int BLNK_FLASH_TIME = 2000;                       // Period of Blynk flash
 const static char BLNK_PARAM_PROMPT[] = "Enter Blynk token";
 const static char BLNK_PARAM_ID[] = "blnk_token";
 
@@ -233,17 +239,6 @@ BLYNK_WRITE(BLNK_DIMMER)
   Blynk.virtualWrite(BLNK_GAUGE, outputLED.getLevel());       // update Blynk gauge
 }
 
-// Flash Blynk control LED
-
-SimpleTimer blnkFlashTimer;
-bool blnkFlash = false;
-
-void flashBlnkLED()
-{
-  Blynk.virtualWrite(BLYK_CTRL_LED, blnkFlash*255);
-  blnkFlash = !blnkFlash;
-}
-
 
 // Switch functions
 // ----------------
@@ -262,19 +257,26 @@ bool isOnline = false;          // Did we initially get connecteed
 
 void setup()
 {     
+#ifdef DEBUG
+  pinMode(DEBUG_PIN,OUTPUT);
+#endif
+
+  analogWriteFreq( 100 );                                 // Slow down the PWM duty cycle to give MOSFET time to respond
+
+  digitalWrite(ORANGE_LED_PIN,HIGH);
+  
   // Setup EEPROM
   
   EEPROM.begin(EEPROM_MAX);
 
   // Setup LEDs
 
-  analogWriteFreq( 100 );                                 // Slow down the PWM duty cycle to give MOSFET time to respond
+  pinMode(ORANGE_LED_PIN, OUTPUT);
+  pinMode(BLUE_LED_PIN,OUTPUT);
   updateLEDs.attach_ms(LED_UPRATE_RATE, updateLEDtick);   // start LED update timer
+  flashLEDs.attach_ms(FLASH_NORMAL, flashLEDtick);   // start LED update timer
 
-  orangeLED.setState(true);
-  orangeLED.dimLED(true);
-  blueLED.setState(false);
-  blueLED.dimLED(true);
+  flashOrange = true;
 
   // Turn on serial
   
@@ -358,12 +360,10 @@ void setup()
 
   if( isOnline ) Blynk.config(blynk_token);                 // Configure Blynk session
 
-  if( isOnline ) blnkFlashTimer.setInterval(BLNK_FLASH_TIME, flashBlnkLED);   // Start Blynk LED flashing
-
-  orangeLED.setDimRate(LED_DIM_NORMAL);                     // Normal mode
-
   DEBUG_PRINTLN( "Up and running ..." );
 
+  flashOrange = false;
+  
   delay(1000);
 }
 
@@ -374,20 +374,22 @@ void setup()
 
 void loop()
 {
+#ifdef DEBUG
+  digitalWrite(DEBUG_PIN,HIGH);
+#endif
+
   if( isOnline ) Blynk.run();                       // Let Blynk do its stuff - it will also try to reconnect wifi if disconnected
+
+#ifdef DEBUG
+  digitalWrite(DEBUG_PIN,LOW);
+#endif
 
   actionBtn.poll();                                 // Poll main button
   
   // Payloads
 
-  blueLED.setState((!actionBtn.on())^(!isOnline));  // If online then blue flashing and orange when pressed
-  orangeLED.setState((actionBtn.on())^(!isOnline)); // If offline then vise versa
-  
-  if( actionBtn.on() )                               // Do flashing  when pressed
-  {
-    blueLED.setLevel(100);
-    orangeLED.setLevel(100);
-  }
+  digitalWrite(BLUE_LED_PIN,(!actionBtn.on())^(!isOnline));  // If online then blue flashing and orange when pressed
+  digitalWrite(ORANGE_LED_PIN,(actionBtn.on())^(!isOnline)); // If offline then vise versa
 
   if( actionBtn.doubleClick() )                     // Toggle on/offf
   {
