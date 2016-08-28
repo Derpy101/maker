@@ -1,0 +1,7 @@
+output
+*.epf
+*.lck
+*.s#1
+*.pro
+*.b#*
+*.s#*
