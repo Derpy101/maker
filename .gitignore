@@ -1,7 +1,9 @@
-output
+**/output/
+libraries/
 *.epf
 *.lck
 *.s#1
 *.pro
 *.b#*
 *.s#*
+
